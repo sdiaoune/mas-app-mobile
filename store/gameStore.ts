@@ -24,6 +24,7 @@ interface GameStore extends GameState {
     value: number
   ) => void;
   togglePlayerOnCourt: (teamId: string, playerId: string) => void;
+  addPlayer: (teamId: string, player: Omit<Player, 'id'>) => void;
   
   // Event Actions
   addEvent: (event: Omit<GameEvent, 'id' | 'timestamp'>) => void;
@@ -174,6 +175,24 @@ export const useGameStore = create<GameStore>()(
                 ? { ...p, isOnCourt: !p.isOnCourt }
                 : p
             ),
+          },
+        }));
+      },
+
+      addPlayer: (teamId, player) => {
+        const state = get();
+        const team = teamId === state.homeTeam.id ? 'homeTeam' : 'awayTeam';
+        
+        set(state => ({
+          [team]: {
+            ...state[team],
+            players: [
+              ...state[team].players,
+              {
+                ...player,
+                id: Date.now().toString(),
+              },
+            ],
           },
         }));
       },

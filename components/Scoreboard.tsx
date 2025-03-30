@@ -1,9 +1,11 @@
 import React from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { useGameStore } from '../store/gameStore';
+import { useGameClock } from '../hooks/useGameClock';
 
 export const Scoreboard = () => {
-  const { homeTeam, awayTeam, period, clock, isRunning, possession } = useGameStore();
+  const { homeTeam, awayTeam, period, possession } = useGameStore();
+  const { currentTime, isRunning } = useGameClock();
 
   return (
     <View style={styles.container}>
@@ -19,7 +21,7 @@ export const Scoreboard = () => {
           {/* Center Info */}
           <View style={styles.centerInfo}>
             <Text style={styles.period}>{`Q${period}`}</Text>
-            <Text style={[styles.clock, isRunning && styles.clockRunning]}>{clock}</Text>
+            <Text style={[styles.clock, isRunning && styles.clockRunning]}>{currentTime}</Text>
           </View>
           
           <View style={[styles.teamScore, possession === awayTeam.id && styles.possessionIndicator]}>

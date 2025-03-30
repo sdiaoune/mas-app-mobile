@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { useGameStore } from '../store/gameStore';
+import { useGameClock } from '../hooks/useGameClock';
 
 interface ActionButtonProps {
   label: string;
@@ -37,6 +38,7 @@ const ActionButton = ({ label, onPress, color = '#4CAF50', size = 'medium' }: Ac
 export const GameControls = () => {
   const { addPoints, addFoul, addTimeout, toggleClock, addEvent } = useGameStore();
   const { homeTeam, awayTeam } = useGameStore();
+  const { currentTime, isRunning } = useGameClock();
 
   const handleAction = (
     teamId: string,
@@ -58,7 +60,7 @@ export const GameControls = () => {
             teamId,
             playerId,
             value: points,
-            gameTime: '12:00', // TODO: Get actual game time
+            gameTime: currentTime,
             description: `${points}pt by ${player.name}`,
           });
         }
@@ -69,7 +71,7 @@ export const GameControls = () => {
           type: 'FOUL',
           teamId,
           playerId,
-          gameTime: '12:00', // TODO: Get actual game time
+          gameTime: currentTime,
           description: `Foul on ${player.name}`,
         });
         break;
@@ -79,7 +81,7 @@ export const GameControls = () => {
           type: 'TIMEOUT',
           teamId,
           playerId,
-          gameTime: '12:00', // TODO: Get actual game time
+          gameTime: currentTime,
           description: `Timeout ${team.name}`,
         });
         break;
@@ -118,7 +120,7 @@ export const GameControls = () => {
         <Text style={styles.sectionTitle}>Game Controls</Text>
         <View style={styles.buttonRow}>
           <ActionButton
-            label="⏱"
+            label={isRunning ? "⏸" : "⏱"}
             color="#9C27B0"
             onPress={toggleClock}
           />
