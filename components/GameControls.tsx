@@ -69,9 +69,18 @@ interface MissDetailsModalProps {
   onClose: () => void;
   onConfirm: (missType: MissType, byPlayerId?: string) => void;
   opposingTeam: Team;
+  shootingTeam: Team;
+  shootingPlayerId: string;
 }
 
-const MissDetailsModal = ({ visible, onClose, onConfirm, opposingTeam }: MissDetailsModalProps) => {
+const MissDetailsModal = ({ 
+  visible, 
+  onClose, 
+  onConfirm, 
+  opposingTeam,
+  shootingTeam,
+  shootingPlayerId
+}: MissDetailsModalProps) => {
   const [selectedType, setSelectedType] = useState<MissType | null>(null);
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
 
@@ -83,6 +92,21 @@ const MissDetailsModal = ({ visible, onClose, onConfirm, opposingTeam }: MissDet
   };
 
   const needsPlayer = selectedType === 'BLOCKED' || selectedType === 'REBOUNDED';
+
+  // Get available players based on the selected miss type
+  const availablePlayers = useMemo(() => {
+    if (selectedType === 'BLOCKED') {
+      // For blocks, only show opposing team's active players
+      return opposingTeam.players.filter(p => p.isOnCourt);
+    } else if (selectedType === 'REBOUNDED') {
+      // For rebounds, show all active players except the shooter
+      return [
+        ...shootingTeam.players.filter(p => p.isOnCourt && p.id !== shootingPlayerId),
+        ...opposingTeam.players.filter(p => p.isOnCourt)
+      ];
+    }
+    return [];
+  }, [selectedType, opposingTeam.players, shootingTeam.players, shootingPlayerId]);
 
   return (
     <Modal
@@ -101,7 +125,10 @@ const MissDetailsModal = ({ visible, onClose, onConfirm, opposingTeam }: MissDet
                 styles.missTypeButton,
                 selectedType === 'BLOCKED' && styles.missTypeButtonSelected
               ]}
-              onPress={() => setSelectedType('BLOCKED')}
+              onPress={() => {
+                setSelectedType('BLOCKED');
+                setSelectedPlayer(null); // Reset player selection when type changes
+              }}
             >
               <Text style={styles.missTypeButtonText}>Blocked</Text>
             </Pressable>
@@ -110,7 +137,10 @@ const MissDetailsModal = ({ visible, onClose, onConfirm, opposingTeam }: MissDet
                 styles.missTypeButton,
                 selectedType === 'REBOUNDED' && styles.missTypeButtonSelected
               ]}
-              onPress={() => setSelectedType('REBOUNDED')}
+              onPress={() => {
+                setSelectedType('REBOUNDED');
+                setSelectedPlayer(null); // Reset player selection when type changes
+              }}
             >
               <Text style={styles.missTypeButtonText}>Rebounded</Text>
             </Pressable>
@@ -119,7 +149,10 @@ const MissDetailsModal = ({ visible, onClose, onConfirm, opposingTeam }: MissDet
                 styles.missTypeButton,
                 selectedType === 'OUT_OF_BOUNDS' && styles.missTypeButtonSelected
               ]}
-              onPress={() => setSelectedType('OUT_OF_BOUNDS')}
+              onPress={() => {
+                setSelectedType('OUT_OF_BOUNDS');
+                setSelectedPlayer(null); // Reset player selection when type changes
+              }}
             >
               <Text style={styles.missTypeButtonText}>Out of Bounds</Text>
             </Pressable>
@@ -127,18 +160,18 @@ const MissDetailsModal = ({ visible, onClose, onConfirm, opposingTeam }: MissDet
 
           {needsPlayer && (
             <View style={styles.playerSelection}>
-              <Text style={styles.modalSubtitle}>Select Player</Text>
+              <Text style={styles.modalSubtitle}>
+                {selectedType === 'BLOCKED' ? 'Select Blocking Player' : 'Select Rebounding Player'}
+              </Text>
               <ScrollView horizontal style={styles.playerList}>
-                {opposingTeam.players
-                  .filter(p => p.isOnCourt)
-                  .map((player) => (
-                    <PlayerButton
-                      key={player.id}
-                      player={player}
-                      isSelected={selectedPlayer?.id === player.id}
-                      onPress={() => setSelectedPlayer(player)}
-                    />
-                  ))}
+                {availablePlayers.map((player) => (
+                  <PlayerButton
+                    key={player.id}
+                    player={player}
+                    isSelected={selectedPlayer?.id === player.id}
+                    onPress={() => setSelectedPlayer(player)}
+                  />
+                ))}
               </ScrollView>
             </View>
           )}
@@ -243,13 +276,13 @@ export const GameControls = () => {
   const handleMissConfirm = (missType: MissType, byPlayerId?: string) => {
     if (!selectedTeam || !selectedPlayer || !missPoints) return;
 
-    const opposingTeamId = selectedTeam.id === homeTeam.id ? awayTeam.id : homeTeam.id;
+    const byPlayerTeamId = byPlayerId ? 
+      (byPlayerId === selectedTeam.id ? selectedTeam.id : opposingTeam.id) : undefined;
+    
     const byPlayer = byPlayerId ? 
-      (selectedTeam.id === homeTeam.id ? awayTeam : homeTeam).players.find(p => p.id === byPlayerId) : 
+      ([...selectedTeam.players, ...opposingTeam.players]).find(p => p.id === byPlayerId) : 
       undefined;
 
-    let description = `Missed ${missPoints}pt by ${selectedPlayer.name}`;
-    
     // Add the primary miss event
     addEvent({
       type: 'POINT',
@@ -264,15 +297,15 @@ export const GameControls = () => {
     if (missType === 'BLOCKED' && byPlayerId) {
       addEvent({
         type: 'BLOCK',
-        teamId: opposingTeamId,
+        teamId: opposingTeam.id, // Blocks can only come from opposing team
         playerId: byPlayerId,
         gameTime: currentTime,
         description: `Block by ${byPlayer?.name}`,
       });
-    } else if (missType === 'REBOUNDED' && byPlayerId) {
+    } else if (missType === 'REBOUNDED' && byPlayerId && byPlayerTeamId) {
       addEvent({
         type: 'REBOUND',
-        teamId: opposingTeamId,
+        teamId: byPlayerTeamId, // Rebounds can come from either team
         playerId: byPlayerId,
         gameTime: currentTime,
         description: `Rebound by ${byPlayer?.name}`,
@@ -443,7 +476,9 @@ export const GameControls = () => {
           setMissPoints(null);
         }}
         onConfirm={handleMissConfirm}
-        opposingTeam={opposingTeam}
+        opposingTeam={opposingTeam ?? homeTeam}
+        shootingTeam={selectedTeam ?? homeTeam}
+        shootingPlayerId={selectedPlayer?.id ?? ''}
       />
     </View>
   );
