@@ -175,10 +175,31 @@ export const exportGameStats = async (
     ),
   ];
 
+  // Game Log worksheet
+  const gameLogData = [
+    ['Game Log'],
+    [],
+    ['Time', 'Team', 'Player', 'Event', 'Description'],
+    ...events
+      .sort((a, b) => b.timestamp - a.timestamp)
+      .map(event => {
+        const team = event.teamId === homeTeam.id ? homeTeam : awayTeam;
+        const player = team.players.find(p => p.id === event.playerId);
+        return [
+          event.gameTime,
+          team.name,
+          player ? `${player.number} ${player.name}` : '',
+          event.type,
+          event.description,
+        ];
+      }),
+  ];
+
   // Add worksheets to workbook
   utils.book_append_sheet(wb, utils.aoa_to_sheet(boxScoreData), 'Box Score');
   utils.book_append_sheet(wb, utils.aoa_to_sheet(detailedStatsData), 'Detailed Stats');
   utils.book_append_sheet(wb, utils.aoa_to_sheet(shotChartData), 'Shot Chart Data');
+  utils.book_append_sheet(wb, utils.aoa_to_sheet(gameLogData), 'Game Log');
 
   // Generate Excel file
   const wbout = write(wb, { type: 'base64', bookType: 'xlsx' });
