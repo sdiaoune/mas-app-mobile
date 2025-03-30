@@ -1,50 +1,97 @@
-# Welcome to your Expo app 👋
+# Basketball Scorekeeper App
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+A modern, feature-rich basketball scorekeeping app built with React Native and Expo.
 
-## Get started
+## Features
 
-1. Install dependencies
+- Real-time scoreboard with team names, score, and game clock
+- Detailed box score tracking for each player
+  - Points, rebounds, assists, steals, blocks, fouls
+  - Field goal, three-point, and free throw percentages
+- Game log with timestamped events
+- Interactive scoring controls
+- Player substitution management
+- Game clock editor
+- Modern, dark-themed UI
 
-   ```bash
-   npm install
-   ```
+## Prerequisites
 
-2. Start the app
+- Node.js (v14 or newer)
+- npm or yarn
+- Expo CLI (`npm install -g expo-cli`)
+- iOS Simulator (for Mac users) or Android Studio (for Android development)
 
-   ```bash
-    npx expo start
-   ```
+## Installation
 
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
-
+1. Clone the repository:
 ```bash
-npm run reset-project
+git clone <repository-url>
+cd basketball-scorekeeper
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+2. Install dependencies:
+```bash
+npm install
+```
 
-## Learn more
+3. Start the development server:
+```bash
+npm start
+```
 
-To learn more about developing your project with Expo, look at the following resources:
+4. Run on your preferred platform:
+- Press `i` for iOS simulator
+- Press `a` for Android emulator
+- Scan the QR code with Expo Go app on your physical device
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+## Usage
 
-## Join the community
+1. Start a New Game:
+   - The app will initialize with default team names and empty rosters
+   - Add players to each team before starting
 
-Join our community of developers creating universal apps.
+2. During the Game:
+   - Use the scoring buttons to record points (1pt, 2pt, 3pt)
+   - Track fouls and timeouts
+   - Manage substitutions using the team substitution buttons
+   - Edit the game clock by tapping on the scoreboard
+   - View live statistics in the box score
+   - Monitor game events in the game log
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+3. Game Management:
+   - The game clock can be started/stopped using the clock button
+   - Use the substitution buttons to manage player rotations
+   - All game events are automatically logged with timestamps
+
+## Project Structure
+
+```
+my-app/
+├── app/                 # Main application screens
+├── components/         # Reusable React components
+│   ├── Scoreboard.tsx
+│   ├── GameControls.tsx
+│   ├── BoxScore.tsx
+│   ├── GameLog.tsx
+│   ├── SubstitutionModal.tsx
+│   └── ClockEditor.tsx
+├── hooks/             # Custom React hooks
+│   └── useGameClock.ts
+├── store/             # State management (Zustand)
+│   └── gameStore.ts
+├── types/             # TypeScript type definitions
+│   └── game.ts
+└── package.json
+```
+
+## Contributing
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
