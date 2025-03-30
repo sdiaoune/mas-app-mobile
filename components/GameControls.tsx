@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, Pressable, ScrollView, Modal } from 'react-nati
 import { useGameStore } from '../store/gameStore';
 import { useGameClock } from '../hooks/useGameClock';
 import { Team, Player } from '../types/game';
+import { ShotLocationModal } from './ShotLocationModal';
 
 interface ActionButtonProps {
   label: string;
@@ -209,6 +210,8 @@ export const GameControls = () => {
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
   const [missModalVisible, setMissModalVisible] = useState(false);
   const [missPoints, setMissPoints] = useState<number | null>(null);
+  const [shotLocationModalVisible, setShotLocationModalVisible] = useState(false);
+  const [pendingPoints, setPendingPoints] = useState<number | null>(null);
 
   // Calculate active players count for both teams
   const activePlayersCount = useMemo(() => ({
@@ -234,15 +237,8 @@ export const GameControls = () => {
     switch (action) {
       case 'POINT':
         if (points) {
-          addPoints(selectedTeam.id, selectedPlayer.id, points);
-          addEvent({
-            type: 'POINT',
-            teamId: selectedTeam.id,
-            playerId: selectedPlayer.id,
-            value: points,
-            gameTime: currentTime,
-            description: `${points}pt by ${selectedPlayer.name}`,
-          });
+          setPendingPoints(points);
+          setShotLocationModalVisible(true);
         }
         break;
       case 'FOUL':
@@ -270,7 +266,40 @@ export const GameControls = () => {
 
   const handleMiss = (points: number) => {
     setMissPoints(points);
-    setMissModalVisible(true);
+    setShotLocationModalVisible(true);
+  };
+
+  const handleShotLocationConfirm = (location: { x: number; y: number }) => {
+    if (!selectedTeam || !selectedPlayer || !(pendingPoints || missPoints)) return;
+
+    if (pendingPoints) {
+      // Handle made shot
+      addPoints(selectedTeam.id, selectedPlayer.id, pendingPoints);
+      addEvent({
+        type: 'POINT',
+        teamId: selectedTeam.id,
+        playerId: selectedPlayer.id,
+        value: pendingPoints,
+        gameTime: currentTime,
+        description: `${pendingPoints}pt by ${selectedPlayer.name}`,
+        shotLocation: location,
+      });
+      setPendingPoints(null);
+    } else if (missPoints) {
+      // Handle missed shot
+      addEvent({
+        type: 'POINT',
+        teamId: selectedTeam.id,
+        playerId: selectedPlayer.id,
+        value: 0,
+        gameTime: currentTime,
+        description: `Missed ${missPoints}pt shot by ${selectedPlayer.name}`,
+        shotLocation: location,
+      });
+      setMissModalVisible(true);
+    }
+
+    setShotLocationModalVisible(false);
   };
 
   const handleMissConfirm = (missType: MissType, byPlayerId?: string) => {
@@ -282,16 +311,6 @@ export const GameControls = () => {
     const byPlayer = byPlayerId ? 
       ([...selectedTeam.players, ...opposingTeam.players]).find(p => p.id === byPlayerId) : 
       undefined;
-
-    // Add the primary miss event
-    addEvent({
-      type: 'POINT',
-      teamId: selectedTeam.id,
-      playerId: selectedPlayer.id,
-      value: 0, // 0 points for a miss
-      gameTime: currentTime,
-      description: `Missed ${missPoints}pt shot by ${selectedPlayer.name}`,
-    });
 
     // Add the corresponding event based on miss type
     if (missType === 'BLOCKED' && byPlayerId) {
@@ -312,8 +331,8 @@ export const GameControls = () => {
       });
     }
 
-    setMissModalVisible(false);
     setMissPoints(null);
+    setMissModalVisible(false);
   };
 
   const noPlayerSelected = !selectedPlayer || !selectedPlayer.isOnCourt;
@@ -479,6 +498,15 @@ export const GameControls = () => {
         opposingTeam={opposingTeam ?? homeTeam}
         shootingTeam={selectedTeam ?? homeTeam}
         shootingPlayerId={selectedPlayer?.id ?? ''}
+      />
+
+      <ShotLocationModal
+        visible={shotLocationModalVisible}
+        onClose={() => {
+          setShotLocationModalVisible(false);
+          setPendingPoints(null);
+        }}
+        onConfirm={handleShotLocationConfirm}
       />
     </View>
   );

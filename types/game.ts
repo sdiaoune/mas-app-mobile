@@ -36,6 +36,7 @@ export interface GameEvent {
   teamId: string;
   value?: number;
   description: string;
+  shotLocation?: { x: number; y: number };
 }
 
 export interface GameState {
