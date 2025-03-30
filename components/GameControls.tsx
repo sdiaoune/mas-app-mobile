@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
+import React, { useState, useMemo } from 'react';
+import { View, Text, StyleSheet, Pressable, ScrollView, Modal } from 'react-native';
 import { useGameStore } from '../store/gameStore';
 import { useGameClock } from '../hooks/useGameClock';
 import { Team, Player } from '../types/game';
@@ -62,16 +62,133 @@ const PlayerButton = ({ player, isSelected, onPress }: PlayerButtonProps) => (
   </Pressable>
 );
 
+type MissType = 'BLOCKED' | 'REBOUNDED' | 'OUT_OF_BOUNDS';
+
+interface MissDetailsModalProps {
+  visible: boolean;
+  onClose: () => void;
+  onConfirm: (missType: MissType, byPlayerId?: string) => void;
+  opposingTeam: Team;
+}
+
+const MissDetailsModal = ({ visible, onClose, onConfirm, opposingTeam }: MissDetailsModalProps) => {
+  const [selectedType, setSelectedType] = useState<MissType | null>(null);
+  const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
+
+  const handleConfirm = () => {
+    if (!selectedType) return;
+    onConfirm(selectedType, selectedPlayer?.id);
+    setSelectedType(null);
+    setSelectedPlayer(null);
+  };
+
+  const needsPlayer = selectedType === 'BLOCKED' || selectedType === 'REBOUNDED';
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onClose}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalContent}>
+          <Text style={styles.modalTitle}>Shot Details</Text>
+          
+          <View style={styles.missTypeButtons}>
+            <Pressable
+              style={[
+                styles.missTypeButton,
+                selectedType === 'BLOCKED' && styles.missTypeButtonSelected
+              ]}
+              onPress={() => setSelectedType('BLOCKED')}
+            >
+              <Text style={styles.missTypeButtonText}>Blocked</Text>
+            </Pressable>
+            <Pressable
+              style={[
+                styles.missTypeButton,
+                selectedType === 'REBOUNDED' && styles.missTypeButtonSelected
+              ]}
+              onPress={() => setSelectedType('REBOUNDED')}
+            >
+              <Text style={styles.missTypeButtonText}>Rebounded</Text>
+            </Pressable>
+            <Pressable
+              style={[
+                styles.missTypeButton,
+                selectedType === 'OUT_OF_BOUNDS' && styles.missTypeButtonSelected
+              ]}
+              onPress={() => setSelectedType('OUT_OF_BOUNDS')}
+            >
+              <Text style={styles.missTypeButtonText}>Out of Bounds</Text>
+            </Pressable>
+          </View>
+
+          {needsPlayer && (
+            <View style={styles.playerSelection}>
+              <Text style={styles.modalSubtitle}>Select Player</Text>
+              <ScrollView horizontal style={styles.playerList}>
+                {opposingTeam.players
+                  .filter(p => p.isOnCourt)
+                  .map((player) => (
+                    <PlayerButton
+                      key={player.id}
+                      player={player}
+                      isSelected={selectedPlayer?.id === player.id}
+                      onPress={() => setSelectedPlayer(player)}
+                    />
+                  ))}
+              </ScrollView>
+            </View>
+          )}
+
+          <View style={styles.modalButtons}>
+            <Pressable
+              style={[styles.modalButton, styles.modalButtonCancel]}
+              onPress={onClose}
+            >
+              <Text style={styles.modalButtonText}>Cancel</Text>
+            </Pressable>
+            <Pressable
+              style={[
+                styles.modalButton,
+                styles.modalButtonConfirm,
+                (!selectedType || (needsPlayer && !selectedPlayer)) && styles.modalButtonDisabled
+              ]}
+              onPress={handleConfirm}
+              disabled={!selectedType || (needsPlayer && !selectedPlayer)}
+            >
+              <Text style={styles.modalButtonText}>Confirm</Text>
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+};
+
 export const GameControls = () => {
   const { addPoints, addFoul, addTimeout, toggleClock, addEvent } = useGameStore();
   const { homeTeam, awayTeam } = useGameStore();
   const { currentTime, isRunning } = useGameClock();
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
+  const [missModalVisible, setMissModalVisible] = useState(false);
+  const [missPoints, setMissPoints] = useState<number | null>(null);
+
+  // Calculate active players count for both teams
+  const activePlayersCount = useMemo(() => ({
+    home: homeTeam.players.filter(p => p.isOnCourt).length,
+    away: awayTeam.players.filter(p => p.isOnCourt).length
+  }), [homeTeam.players, awayTeam.players]);
+
+  // Check if game can proceed (both teams have at least 5 active players)
+  const canGameProceed = activePlayersCount.home >= 5 && activePlayersCount.away >= 5;
 
   const handleTeamSelect = (team: Team) => {
     setSelectedTeam(team);
-    setSelectedPlayer(null); // Reset player selection when team changes
+    setSelectedPlayer(null);
   };
 
   const handlePlayerSelect = (player: Player) => {
@@ -79,7 +196,7 @@ export const GameControls = () => {
   };
 
   const handleAction = (action: string, points?: number) => {
-    if (!selectedTeam || !selectedPlayer) return;
+    if (!selectedTeam || !selectedPlayer || !canGameProceed) return;
 
     switch (action) {
       case 'POINT':
@@ -118,10 +235,77 @@ export const GameControls = () => {
     }
   };
 
+  const handleMiss = (points: number) => {
+    setMissPoints(points);
+    setMissModalVisible(true);
+  };
+
+  const handleMissConfirm = (missType: MissType, byPlayerId?: string) => {
+    if (!selectedTeam || !selectedPlayer || !missPoints) return;
+
+    const opposingTeamId = selectedTeam.id === homeTeam.id ? awayTeam.id : homeTeam.id;
+    const byPlayer = byPlayerId ? 
+      (selectedTeam.id === homeTeam.id ? awayTeam : homeTeam).players.find(p => p.id === byPlayerId) : 
+      undefined;
+
+    let description = `Missed ${missPoints}pt by ${selectedPlayer.name}`;
+    
+    // Add the primary miss event
+    addEvent({
+      type: 'POINT',
+      teamId: selectedTeam.id,
+      playerId: selectedPlayer.id,
+      value: 0, // 0 points for a miss
+      gameTime: currentTime,
+      description: `Missed ${missPoints}pt shot by ${selectedPlayer.name}`,
+    });
+
+    // Add the corresponding event based on miss type
+    if (missType === 'BLOCKED' && byPlayerId) {
+      addEvent({
+        type: 'BLOCK',
+        teamId: opposingTeamId,
+        playerId: byPlayerId,
+        gameTime: currentTime,
+        description: `Block by ${byPlayer?.name}`,
+      });
+    } else if (missType === 'REBOUNDED' && byPlayerId) {
+      addEvent({
+        type: 'REBOUND',
+        teamId: opposingTeamId,
+        playerId: byPlayerId,
+        gameTime: currentTime,
+        description: `Rebound by ${byPlayer?.name}`,
+      });
+    }
+
+    setMissModalVisible(false);
+    setMissPoints(null);
+  };
+
   const noPlayerSelected = !selectedPlayer || !selectedPlayer.isOnCourt;
+  const isActionDisabled = noPlayerSelected || !canGameProceed;
+
+  const opposingTeam = selectedTeam?.id === homeTeam.id ? awayTeam : homeTeam;
 
   return (
     <View style={styles.container}>
+      {!canGameProceed && (
+        <View style={styles.warningContainer}>
+          <Text style={styles.warningText}>
+            Each team must have at least 5 players on court to start the game
+          </Text>
+          <View style={styles.teamStatusContainer}>
+            <Text style={styles.teamStatus}>
+              {homeTeam.name}: {activePlayersCount.home}/5 players
+            </Text>
+            <Text style={styles.teamStatus}>
+              {awayTeam.name}: {activePlayersCount.away}/5 players
+            </Text>
+          </View>
+        </View>
+      )}
+
       {/* Team Selection */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Select Team</Text>
@@ -129,20 +313,28 @@ export const GameControls = () => {
           <Pressable
             style={[
               styles.teamButton,
-              selectedTeam?.id === homeTeam.id && styles.teamButtonSelected
+              selectedTeam?.id === homeTeam.id && styles.teamButtonSelected,
+              activePlayersCount.home < 5 && styles.teamButtonWarning
             ]}
             onPress={() => handleTeamSelect(homeTeam)}
           >
             <Text style={styles.teamButtonText}>{homeTeam.name}</Text>
+            <Text style={styles.playerCount}>
+              {activePlayersCount.home}/5 players
+            </Text>
           </Pressable>
           <Pressable
             style={[
               styles.teamButton,
-              selectedTeam?.id === awayTeam.id && styles.teamButtonSelected
+              selectedTeam?.id === awayTeam.id && styles.teamButtonSelected,
+              activePlayersCount.away < 5 && styles.teamButtonWarning
             ]}
             onPress={() => handleTeamSelect(awayTeam)}
           >
             <Text style={styles.teamButtonText}>{awayTeam.name}</Text>
+            <Text style={styles.playerCount}>
+              {activePlayersCount.away}/5 players
+            </Text>
           </Pressable>
         </View>
       </View>
@@ -168,27 +360,54 @@ export const GameControls = () => {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Scoring</Text>
         <View style={styles.buttonRow}>
-          <ActionButton
-            label="1pt"
-            color="#2196F3"
-            size="small"
-            onPress={() => handleAction('POINT', 1)}
-            disabled={noPlayerSelected}
-          />
-          <ActionButton
-            label="2pt"
-            color="#4CAF50"
-            size="medium"
-            onPress={() => handleAction('POINT', 2)}
-            disabled={noPlayerSelected}
-          />
-          <ActionButton
-            label="3pt"
-            color="#FF9800"
-            size="large"
-            onPress={() => handleAction('POINT', 3)}
-            disabled={noPlayerSelected}
-          />
+          <View style={styles.pointColumn}>
+            <ActionButton
+              label="1pt"
+              color="#2196F3"
+              size="small"
+              onPress={() => handleAction('POINT', 1)}
+              disabled={isActionDisabled}
+            />
+            <ActionButton
+              label="Miss"
+              color="#B71C1C"
+              size="small"
+              onPress={() => handleMiss(1)}
+              disabled={isActionDisabled}
+            />
+          </View>
+          <View style={styles.pointColumn}>
+            <ActionButton
+              label="2pt"
+              color="#4CAF50"
+              size="medium"
+              onPress={() => handleAction('POINT', 2)}
+              disabled={isActionDisabled}
+            />
+            <ActionButton
+              label="Miss"
+              color="#B71C1C"
+              size="medium"
+              onPress={() => handleMiss(2)}
+              disabled={isActionDisabled}
+            />
+          </View>
+          <View style={styles.pointColumn}>
+            <ActionButton
+              label="3pt"
+              color="#FF9800"
+              size="large"
+              onPress={() => handleAction('POINT', 3)}
+              disabled={isActionDisabled}
+            />
+            <ActionButton
+              label="Miss"
+              color="#B71C1C"
+              size="large"
+              onPress={() => handleMiss(3)}
+              disabled={isActionDisabled}
+            />
+          </View>
         </View>
       </View>
 
@@ -200,21 +419,32 @@ export const GameControls = () => {
             label={isRunning ? "⏸" : "⏱"}
             color="#9C27B0"
             onPress={toggleClock}
+            disabled={!canGameProceed}
           />
           <ActionButton
             label="Foul"
             color="#F44336"
             onPress={() => handleAction('FOUL')}
-            disabled={noPlayerSelected}
+            disabled={isActionDisabled}
           />
           <ActionButton
             label="T.O."
             color="#607D8B"
             onPress={() => handleAction('TIMEOUT')}
-            disabled={!selectedTeam}
+            disabled={!selectedTeam || !canGameProceed}
           />
         </View>
       </View>
+
+      <MissDetailsModal
+        visible={missModalVisible}
+        onClose={() => {
+          setMissModalVisible(false);
+          setMissPoints(null);
+        }}
+        onConfirm={handleMissConfirm}
+        opposingTeam={opposingTeam}
+      />
     </View>
   );
 };
@@ -223,6 +453,26 @@ const styles = StyleSheet.create({
   container: {
     padding: 16,
     backgroundColor: '#1a1a1a',
+  },
+  warningContainer: {
+    backgroundColor: '#FFF3E0',
+    padding: 16,
+    borderRadius: 8,
+    marginBottom: 16,
+  },
+  warningText: {
+    color: '#E65100',
+    fontSize: 16,
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
+  teamStatusContainer: {
+    marginTop: 8,
+  },
+  teamStatus: {
+    color: '#E65100',
+    fontSize: 14,
+    textAlign: 'center',
   },
   section: {
     marginBottom: 24,
@@ -250,6 +500,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#1976D2',
     borderWidth: 2,
     borderColor: '#90CAF9',
+  },
+  teamButtonWarning: {
+    borderWidth: 2,
+    borderColor: '#FFA726',
   },
   teamButtonText: {
     color: '#fff',
@@ -308,5 +562,92 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 18,
     fontWeight: 'bold',
+  },
+  playerCount: {
+    color: '#FFA726',
+    fontSize: 12,
+    marginTop: 4,
+  },
+  pointColumn: {
+    alignItems: 'center',
+    gap: 8,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: '#1a1a1a',
+    borderRadius: 16,
+    padding: 24,
+    width: '90%',
+    maxWidth: 500,
+  },
+  modalTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#fff',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  modalSubtitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#fff',
+    marginBottom: 12,
+  },
+  missTypeButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 24,
+  },
+  missTypeButton: {
+    flex: 1,
+    backgroundColor: '#333',
+    padding: 12,
+    borderRadius: 8,
+    marginHorizontal: 4,
+    alignItems: 'center',
+  },
+  missTypeButtonSelected: {
+    backgroundColor: '#1976D2',
+    borderWidth: 2,
+    borderColor: '#90CAF9',
+  },
+  missTypeButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  playerSelection: {
+    marginBottom: 24,
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 12,
+  },
+  modalButton: {
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+    minWidth: 100,
+  },
+  modalButtonCancel: {
+    backgroundColor: '#666',
+  },
+  modalButtonConfirm: {
+    backgroundColor: '#4CAF50',
+  },
+  modalButtonDisabled: {
+    opacity: 0.5,
+  },
+  modalButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+    textAlign: 'center',
   },
 }); 
