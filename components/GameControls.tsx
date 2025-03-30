@@ -4,6 +4,7 @@ import { useGameStore } from '../store/gameStore';
 import { useGameClock } from '../hooks/useGameClock';
 import { Team, Player } from '../types/game';
 import { ShotLocationModal } from './ShotLocationModal';
+import { exportGameStats } from '../utils/statsExport';
 
 interface ActionButtonProps {
   label: string;
@@ -203,7 +204,7 @@ const MissDetailsModal = ({
 };
 
 export const GameControls = () => {
-  const { addPoints, addFoul, addTimeout, toggleClock, addEvent } = useGameStore();
+  const { addPoints, addFoul, addTimeout, toggleClock, addEvent, events } = useGameStore();
   const { homeTeam, awayTeam } = useGameStore();
   const { currentTime, isRunning } = useGameClock();
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
@@ -339,6 +340,17 @@ export const GameControls = () => {
   const isActionDisabled = noPlayerSelected || !canGameProceed;
 
   const opposingTeam = selectedTeam?.id === homeTeam.id ? awayTeam : homeTeam;
+
+  const handleExportStats = async () => {
+    try {
+      const today = new Date();
+      const gameDate = today.toLocaleDateString();
+      await exportGameStats(homeTeam, awayTeam, events, gameDate);
+    } catch (error) {
+      console.error('Failed to export stats:', error);
+      // You might want to show an error message to the user here
+    }
+  };
 
   return (
     <View style={styles.container}>
@@ -484,6 +496,12 @@ export const GameControls = () => {
             color="#607D8B"
             onPress={() => handleAction('TIMEOUT')}
             disabled={!selectedTeam || !canGameProceed}
+          />
+          <ActionButton
+            label="📊"
+            color="#00796B"
+            onPress={handleExportStats}
+            disabled={!canGameProceed}
           />
         </View>
       </View>
